@@ -39,7 +39,12 @@ jobs:
           set -eu
           semgrep --version
           semgrep --config p/ci . 2>&1 | tee semgrep.txt || true
-
+      - name: Upload Semgrep log artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-log
+          path: semgrep.txt
       # Slack に送るために 1000文字にカット（行単位がよければ head -n でもOK）
       - name: Cut output
         if: always()
