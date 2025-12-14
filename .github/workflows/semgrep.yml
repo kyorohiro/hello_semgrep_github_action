@@ -69,7 +69,7 @@ jobs:
           export RUN_URL="https://github.com/${REPO}/actions/runs/${RUN_ID}"
           export BODY="$(head -c 1000 semgrep.txt || true)"
 
-          python ci/payload_gen.py > payload.json
+          python .github/ci/payload_gen.py > payload.json
 
           curl -sS -X POST \
             -H "Content-type: application/json" \
