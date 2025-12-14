@@ -51,48 +51,38 @@ jobs:
         run: |
           set -eu
           head -c 1000 semgrep.txt > semgrep_short.txt || true
-      - name: Notify Slack
-        if: ${{ always() && secrets.SLACK_WEBHOOK_URL != '' }}
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          JOB_STATUS: ${{ job.status }}
-          REPO: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
-          REF: ${{ github.ref_name }}
-          ACTOR: ${{ github.actor }}
-          EVENT: ${{ github.event_name }}
-        run: |
-          set -euo pipefail
+- name: Notify Slack
+  if: ${{ always() && env.SLACK_WEBHOOK_URL != '' }}
+  env:
+    SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+    JOB_STATUS: ${{ job.status }}
+    REPO: ${{ github.repository }}
+    RUN_ID: ${{ github.run_id }}
+    REF: ${{ github.ref_name }}
+    ACTOR: ${{ github.actor }}
+    EVENT: ${{ github.event_name }}
+  run: |
+    set -euo pipefail
+    RUN_URL="https://github.com/${REPO}/actions/runs/${RUN_ID}"
+    BODY="$(head -c 1000 semgrep.txt || true)"
 
-          RUN_URL="https://github.com/${REPO}/actions/runs/${RUN_ID}"
-          BODY="$(head -c 1000 semgrep.txt || true)"
+    python - <<'PY' > payload.json
+import json, os
+payload = {
+  "text": f"Semgrep {os.environ['JOB_STATUS']} - {os.environ['REPO']}",
+  "blocks": [
+    {"type": "section", "text": {"type": "mrkdwn", "text":
+      f"*Semgrep {os.environ['JOB_STATUS']}*\n*Repo:* {os.environ['REPO']}\n*Ref:* {os.environ['REF']}\n*Event:* {os.environ['EVENT']}\n*Actor:* {os.environ['ACTOR']}\n*Run:* <{os.environ['RUN_URL']}|Open GitHub Actions run>"
+    }},
+    {"type": "section", "text": {"type": "mrkdwn", "text":
+      "*Output (first 1000 chars)*\n```\n" + os.environ.get("BODY","") + "\n```"
+    }},
+  ]
+}
+print(json.dumps(payload))
+PY
 
-          python - <<'PY' > payload.json
-          import json, os
-          payload = {
-            "text": f"Semgrep {os.environ['JOB_STATUS']} - {os.environ['REPO']}",
-            "blocks": [
-              {"type": "section", "text": {"type": "mrkdwn", "text":
-                f"*Semgrep {os.environ['JOB_STATUS']}*\n"
-                f"*Repo:* {os.environ['REPO']}\n"
-                f"*Ref:* {os.environ['REF']}\n"
-                f"*Event:* {os.environ['EVENT']}\n"
-                f"*Actor:* {os.environ['ACTOR']}\n"
-                f"*Run:* <{os.environ['RUN_URL']}|Open GitHub Actions run>"
-              }},
-              {"type": "section", "text": {"type": "mrkdwn", "text":
-                "*Output (first 1000 chars)*\n```\n" + os.environ.get("BODY","") + "\n```"
-              }},
-            ]
-          }
-          print(json.dumps(payload))
-          PY
-
-                    curl -sS -X POST \
-                      -H "Content-type: application/json" \
-                      --data-binary @payload.json \
-                      "$SLACK_WEBHOOK_URL"
-                  env:
-                    RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-                    BODY: ${{ '' }}
+    curl -sS -X POST -H "Content-type: application/json" \
+      --data-binary @payload.json \
+      "$SLACK_WEBHOOK_URL"
 
