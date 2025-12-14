@@ -4,6 +4,10 @@ act push -s SLACK_WEBHOOK_URL="https://hooks.slack.com/services/xxxxx"
 act push --secret-file .secrets
 ```
 
+# DOC
+
+https://docs.github.com/ja/actions
+
 
 # Semgrep → Slack 通知 セットアップ手順
 
