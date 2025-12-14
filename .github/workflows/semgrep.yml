@@ -100,7 +100,7 @@ jobs:
           print(json.dumps(payload))
           PY
 
-                    curl -sS -X POST \
-                      -H "Content-type: application/json" \
-                      --data-binary @payload.json \
-                      "$SLACK_WEBHOOK_URL"
+          curl -sS -X POST \
+            -H "Content-type: application/json" \
+            --data-binary @payload.json \
+            "$SLACK_WEBHOOK_URL"
