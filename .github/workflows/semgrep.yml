@@ -46,13 +46,8 @@ jobs:
           name: semgrep-log
           path: semgrep.txt
       # Slack に送るために 1000文字にカット（行単位がよければ head -n でもOK）
-      - name: Cut output
-        if: always()
-        run: |
-          set -eu
-          head -c 1000 semgrep.txt > semgrep_short.txt || true
       - name: Notify Slack
-        if: ${{ always() && env.SLACK_WEBHOOK_URL != '' }}
+        if: ${{ always() }}
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           JOB_STATUS: ${{ job.status }}
@@ -63,26 +58,41 @@ jobs:
           EVENT: ${{ github.event_name }}
         run: |
           set -euo pipefail
+
+          # secret が無い（fork PR等）なら通知しない
+          if [ -z "${SLACK_WEBHOOK_URL:-}" ]; then
+            echo "SLACK_WEBHOOK_URL is empty; skip Slack notification."
+            exit 0
+          fi
+
           RUN_URL="https://github.com/${REPO}/actions/runs/${RUN_ID}"
           BODY="$(head -c 1000 semgrep.txt || true)"
 
           python - <<'PY' > payload.json
-          import json, os
-          payload = {
-            "text": f"Semgrep {os.environ['JOB_STATUS']} - {os.environ['REPO']}",
-            "blocks": [
-              {"type": "section", "text": {"type": "mrkdwn", "text":
-                f"*Semgrep {os.environ['JOB_STATUS']}*\n*Repo:* {os.environ['REPO']}\n*Ref:* {os.environ['REF']}\n*Event:* {os.environ['EVENT']}\n*Actor:* {os.environ['ACTOR']}\n*Run:* <{os.environ['RUN_URL']}|Open GitHub Actions run>"
-              }},
-              {"type": "section", "text": {"type": "mrkdwn", "text":
-                "*Output (first 1000 chars)*\n```\n" + os.environ.get("BODY","") + "\n```"
-              }},
-            ]
-          }
-      print(json.dumps(payload))
-      PY
+import json, os
+payload = {
+  "text": f"Semgrep {os.environ['JOB_STATUS']} - {os.environ['REPO']}",
+  "blocks": [
+    {"type": "section", "text": {"type": "mrkdwn", "text":
+      f"*Semgrep {os.environ['JOB_STATUS']}*\n"
+      f"*Repo:* {os.environ['REPO']}\n"
+      f"*Ref:* {os.environ['REF']}\n"
+      f"*Event:* {os.environ['EVENT']}\n"
+      f"*Actor:* {os.environ['ACTOR']}\n"
+      f"*Run:* <{os.environ['RUN_URL']}|Open GitHub Actions run>"
+    }},
+    {"type": "section", "text": {"type": "mrkdwn", "text":
+      "*Output (first 1000 chars)*\n```\n" + os.environ.get("BODY","") + "\n```"
+    }},
+  ]
+}
+print(json.dumps(payload))
+PY
 
-          curl -sS -X POST -H "Content-type: application/json" \
+          curl -sS -X POST \
+            -H "Content-type: application/json" \
             --data-binary @payload.json \
             "$SLACK_WEBHOOK_URL"
-
+        env:
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          BODY: ${{ '' }}
