@@ -12,6 +12,7 @@ permissions:
 jobs:
   semgrep:
     runs-on: ubuntu-latest
+    #environment: production
 
     steps:
       - name: Checkout
