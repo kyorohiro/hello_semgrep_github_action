@@ -1,0 +1,144 @@
+#
+# Semgrep を使った静的解析を行う GitHub Actions ワークフロー
+# コミット差分だけ
+#
+name: semgrep
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - '.github/**'
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep:
+    runs-on: ubuntu-latest
+    #environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Semgrep
+        run: |
+          python -m pip install --upgrade pip
+          pip install semgrep
+      - name: Compute baseline commit
+        id: baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            # PR: base ブランチとの merge-base を baseline にする
+            git fetch --no-tags origin "${{ github.base_ref }}":"refs/remotes/origin/${{ github.base_ref }}"
+            BASELINE="$(git merge-base "origin/${{ github.base_ref }}" "${{ github.sha }}")"
+          elif [[ "${{ github.event_name }}" == "push" ]]; then
+            # main push: 直前の commit を baseline にする（その push で増えた分だけ）
+            BASELINE="${{ github.event.before }}"
+          else
+            # workflow_dispatch: baseline なし（フルスキャン）
+            BASELINE=""
+          fi
+
+          echo "baseline=$BASELINE" >> "$GITHUB_OUTPUT"
+          echo "BASELINE=$BASELINE"
+      # Semgrep 実行結果をファイルへ。検出があっても続行するため || true
+      - name: Run Semgrep (r/all, only new findings)
+        id: semgrep
+        shell: bash
+        run: |
+          set -euo pipefail
+          semgrep --version
+
+          BASELINE="${{ steps.baseline.outputs.baseline }}"
+
+          if [[ -n "$BASELINE" ]]; then
+            # baseline との差分（新規のみ）
+            semgrep scan --config r/all --baseline-commit "$BASELINE" --json . | tee semgrep.json
+          else
+            # 手動実行などはフル
+            semgrep scan --config r/all --json . | tee semgrep.json
+          fi
+
+          # Slack 用に 3000 文字程度のサマリを作る（JSONから生成）
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path("semgrep.json").read_text())
+          results = data.get("results", []) or []
+          n = len(results)
+
+          lines = [f"Semgrep new findings: {n}"]
+          for r in results[:50]:
+            path = r.get("path","?")
+            start = (r.get("start") or {}).get("line","?")
+            rid = (r.get("check_id") or r.get("rule_id") or "?")
+            msg = ((r.get("extra") or {}).get("message") or "").replace("\n"," ")
+            lines.append(f"- {path}:{start} [{rid}] {msg}".strip())
+
+          out = "\n".join(lines)
+          Path("semgrep.txt").write_text(out[:3000], encoding="utf-8")
+          print(out[:3000])
+          PY
+
+          # findings があればジョブを fail にする（新規のみでブロックしたい場合）
+          python - <<'PY'
+          import json, sys
+          data = json.load(open("semgrep.json","r"))
+          n = len(data.get("results", []) or [])
+          sys.exit(1 if n > 0 else 0)
+          PY
+      - name: Upload Semgrep artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-log
+          path: |
+            semgrep.txt
+            semgrep.json
+      # Slack に送るために 1000文字にカット（行単位がよければ head -n でもOK）
+      - name: Notify Slack
+        if: always()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          JOB_STATUS: ${{ job.status }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          REF: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SLACK_WEBHOOK_URL:-}" ]; then
+            echo "SLACK_WEBHOOK_URL is empty; skip Slack notification."
+            exit 0
+          fi
+
+          export RUN_URL="https://github.com/${REPO}/actions/runs/${RUN_ID}"
+          export BODY="$(cat semgrep.txt)"
+
+          python .github/ci/payload_gen_latest.py > payload.json
+
+          curl -sS -X POST \
+            -H "Content-type: application/json" \
+            --data-binary @payload.json \
+            "$SLACK_WEBHOOK_URL"
