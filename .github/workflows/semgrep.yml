@@ -69,9 +69,9 @@ jobs:
           set -euo pipefail
           python "${GITHUB_WORKSPACE}/.github/ci/summary_gen.py" \
             --json "${GITHUB_WORKSPACE}/semgrep.json" \
-            --setting "${GITHUB_WORKSPACE}/.github/settings/semgrep_basic_setting.yml" \
             --out-txt "${GITHUB_WORKSPACE}/semgrep.txt" \
             --out-md "${GITHUB_WORKSPACE}/semgrep.md"
+#            --setting "${GITHUB_WORKSPACE}/.github/settings/semgrep_basic_setting.yml" \
 
       - name: Upload Semgrep artifacts
         if: always()

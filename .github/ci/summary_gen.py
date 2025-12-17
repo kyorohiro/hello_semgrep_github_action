@@ -9,10 +9,40 @@ from pathlib import Path
 import yaml
 
 
-def load_yaml(path: Path) -> dict:
-    if not path.exists():
-        return {}
-    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+def _read_yaml(p: Path) -> dict:
+    return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+
+def load_cfg(config_path: Path | None) -> dict:
+    """
+    設定ファイルの優先順位:
+      1) --config で指定されたファイル
+      2) ./ .semgrep.yaml  (実行したディレクトリ内)
+      3) .github/ci/semgrep_basic_setting.yml  (リポジトリルート相当から)
+         ※ これは「今のcwd」からの相対なので、基本は --config を推奨
+    """
+    if config_path is not None:
+        if not config_path.exists():
+            raise FileNotFoundError(f"--config not found: {config_path}")
+        return _read_yaml(config_path)
+
+    local_cfg = Path(".semgrep.yaml")
+    if local_cfg.exists():
+        return _read_yaml(local_cfg)
+
+    fallback = Path(".github/ci/setting.yml")
+    if fallback.exists():
+        return _read_yaml(fallback)
+
+    fallback = Path("../.github/ci/setting.yml")
+    if fallback.exists():
+        return _read_yaml(fallback)
+
+    fallback = Path("../../.github/ci/setting.yml")
+    if fallback.exists():
+        return _read_yaml(fallback)
+
+    # ここまで来たら「どこにも無い」
+    raise FileNotFoundError("Missing config: --config / ./.semgrep.yaml / .github/ci/semgrep_basic_setting.yml")
 
 
 def get_rule_id(r: dict) -> str:
