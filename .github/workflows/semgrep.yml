@@ -47,11 +47,11 @@ jobs:
           OUT_JSON="${GITHUB_WORKSPACE}/semgrep.json"
           OUT_LOG="${GITHUB_WORKSPACE}/semgrep.log"
            # 解析用
-          CMD_JSON="$(python ./.github/ci/semgrep_basic_build.py --json)"
+          CMD_JSON="$(python ./.github/ci/build.py --json)"
           echo "RUN(JSON): ${CMD_JSON}"
           bash -lc "${CMD_JSON}" | tee "${OUT_LOG}" || true
           # 人用
-          CMD_LOG="$(python ./.github/ci/semgrep_basic_build.py)"
+          CMD_LOG="$(python ./.github/ci/build.py)"
           echo "RUN(LOG): ${CMD_LOG}"
           bash -lc "${CMD_LOG}" > "${OUT_LOG}" 2>&1 || true
 #          # 機械用（集計・Slack用）
