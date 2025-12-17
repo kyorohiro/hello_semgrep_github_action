@@ -1,7 +1,3 @@
-#
-# Semgrep を使った静的解析を行う GitHub Actions ワークフロー
-# コミット差分だけ
-#
 name: semgrep
 
 on:
@@ -19,11 +15,12 @@ permissions:
 jobs:
   semgrep:
     runs-on: ubuntu-latest
-    #environment: production
 
     steps:
-      - name: Checkout
+      - name: Checkout (full history for baseline)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -39,28 +36,44 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install semgrep
+
       - name: Compute baseline commit
         id: baseline
         shell: bash
         run: |
           set -euo pipefail
 
+          # Git safe.directory 対策（環境によって必要になる）
+          git config --global --add safe.directory "$GITHUB_WORKSPACE" || true
+
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            # PR: base ブランチとの merge-base を baseline にする
+            # PR: base ブランチを取得して merge-base を baseline にする
             git fetch --no-tags origin "${{ github.base_ref }}":"refs/remotes/origin/${{ github.base_ref }}"
             BASELINE="$(git merge-base "origin/${{ github.base_ref }}" "${{ github.sha }}")"
           elif [[ "${{ github.event_name }}" == "push" ]]; then
-            # main push: 直前の commit を baseline にする（その push で増えた分だけ）
+            # main push: 直前の commit を baseline にする
             BASELINE="${{ github.event.before }}"
           else
             # workflow_dispatch: baseline なし（フルスキャン）
             BASELINE=""
           fi
 
+          # baseline commit が手元に無いなら取ってくる（取れないなら fallback）
+          if [[ -n "$BASELINE" ]]; then
+            if ! git cat-file -e "$BASELINE^{commit}" 2>/dev/null; then
+              echo "Baseline commit not found locally; fetching it..."
+              git fetch --no-tags --prune origin "$BASELINE" || true
+            fi
+            if ! git cat-file -e "$BASELINE^{commit}" 2>/dev/null; then
+              echo "Baseline commit still unavailable; fallback to full scan."
+              BASELINE=""
+            fi
+          fi
+
           echo "baseline=$BASELINE" >> "$GITHUB_OUTPUT"
           echo "BASELINE=$BASELINE"
-      # Semgrep 実行結果をファイルへ。検出があっても続行するため || true
-      - name: Run Semgrep (r/all, only new findings)
+
+      - name: Run Semgrep (r/all, only new findings when baseline exists)
         id: semgrep
         shell: bash
         run: |
@@ -70,14 +83,12 @@ jobs:
           BASELINE="${{ steps.baseline.outputs.baseline }}"
 
           if [[ -n "$BASELINE" ]]; then
-            # baseline との差分（新規のみ）
             semgrep scan --config r/all --baseline-commit "$BASELINE" --json . | tee semgrep.json
           else
-            # 手動実行などはフル
             semgrep scan --config r/all --json . | tee semgrep.json
           fi
 
-          # Slack 用に 3000 文字程度のサマリを作る（JSONから生成）
+          # Slack 用に短いテキストを作る（JSONから生成）
           python - <<'PY'
           import json
           from pathlib import Path
@@ -99,13 +110,14 @@ jobs:
           print(out[:3000])
           PY
 
-          # findings があればジョブを fail にする（新規のみでブロックしたい場合）
+          # 新規 findings があれば fail（落としたくないならこのブロックを消す）
           python - <<'PY'
           import json, sys
           data = json.load(open("semgrep.json","r"))
           n = len(data.get("results", []) or [])
           sys.exit(1 if n > 0 else 0)
           PY
+
       - name: Upload Semgrep artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -114,7 +126,7 @@ jobs:
           path: |
             semgrep.txt
             semgrep.json
-      # Slack に送るために 1000文字にカット（行単位がよければ head -n でもOK）
+
       - name: Notify Slack
         if: always()
         env:
@@ -134,9 +146,9 @@ jobs:
           fi
 
           export RUN_URL="https://github.com/${REPO}/actions/runs/${RUN_ID}"
-          export BODY="$(cat semgrep.txt)"
+          export BODY="$(cat semgrep.txt 2>/dev/null || echo 'semgrep.txt missing')"
 
-          python .github/ci/payload_gen_latest.py > payload.json
+          python .github/ci/payload_gen.py > payload.json
 
           curl -sS -X POST \
             -H "Content-type: application/json" \
