@@ -97,7 +97,7 @@ def main() -> int:
     ap.add_argument("--setting", required=False, help="settings yml path (with optional drop:)")
     ap.add_argument("--out-txt", default="semgrep.txt", help="output txt path")
     ap.add_argument("--out-md", default="semgrep.md", help="output md path")
-    ap.add_argument("--max-txt", type=int, default=3000, help="max chars for txt")
+    ap.add_argument("--max-txt", type=int, default=1000, help="max chars for txt")
     args = ap.parse_args()
 
     json_path = Path(args.json)
