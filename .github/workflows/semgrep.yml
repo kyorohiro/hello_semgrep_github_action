@@ -46,10 +46,10 @@ jobs:
           semgrep --version
 
           # 機械用（集計・Slack用）
-          semgrep scan --config r/all --json . | tee semgrep.json || true
+          semgrep scan --config auto --json . | tee semgrep.json || true
 
           # 人間用（GitHub UI で見れる）
-          semgrep scan --config r/all --sarif . > semgrep.sarif || true
+          semgrep scan --config auto --sarif . > semgrep.sarif || true
 
       # JSON から独自 Summary を作る（Slack用 semgrep.txt を生成）
       - name: Build Summary (JSON -> TXT/MD)
