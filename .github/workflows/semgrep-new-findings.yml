@@ -93,6 +93,7 @@ jobs:
 
           # Slack 用に短いテキストを作る（JSONから生成）
           python - <<'PY'
+          import os
           import json
           from pathlib import Path
           ws = Path(os.environ["GITHUB_WORKSPACE"])
