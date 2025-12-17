@@ -67,74 +67,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python - <<'PY'
-          import json
-          from collections import Counter
-          from pathlib import Path
-
-          data = json.loads(Path("semgrep.json").read_text())
-          results = data.get("results") or []
-          errors = data.get("errors") or []
-
-          total = len(results)
-          error_count = len(errors)
-
-          by_rule = Counter((r.get("check_id") or r.get("rule_id") or "?") for r in results)
-          by_file = Counter((r.get("path") or "?") for r in results)
-
-          def sev(r):
-            return ((r.get("extra") or {}).get("severity") or "UNKNOWN").upper()
-          by_sev = Counter(sev(r) for r in results)
-
-          # TXT（Slack用、短め）
-          lines = []
-          lines.append(f"Semgrep Summary")
-          lines.append(f"- findings: {total}")
-          if error_count:
-            lines.append(f"- errors: {error_count}")
-          if total:
-            lines.append(f"- severity: " + ", ".join(f"{k}:{v}" for k,v in sorted(by_sev.items())))
-            lines.append("")
-            lines.append("Top rules:")
-            for rid, cnt in by_rule.most_common(10):
-              lines.append(f"- {rid}: {cnt}")
-            lines.append("")
-            lines.append("Sample findings:")
-            for r in results[:20]:
-              path = r.get("path","?")
-              start = (r.get("start") or {}).get("line","?")
-              rid = (r.get("check_id") or r.get("rule_id") or "?")
-              msg = ((r.get("extra") or {}).get("message") or "").replace("\n"," ")
-              lines.append(f"- {path}:{start} [{rid}] {msg}".strip())
-
-          out_txt = "\n".join(lines)[:3000]
-          Path("semgrep.txt").write_text(out_txt, encoding="utf-8")
-
-          # MD（人間用、少し丁寧）
-          md = []
-          md.append("# Semgrep report\n")
-          md.append(f"- findings: **{total}**")
-          if error_count:
-            md.append(f"- errors: **{error_count}**")
-          if total:
-            md.append(f"- severity: " + ", ".join(f"**{k}**:{v}" for k,v in sorted(by_sev.items())))
-            md.append("\n## Top rules")
-            for rid, cnt in by_rule.most_common(20):
-              md.append(f"- `{rid}`: {cnt}")
-            md.append("\n## Top files")
-            for fp, cnt in by_file.most_common(20):
-              md.append(f"- `{fp}`: {cnt}")
-            md.append("\n## Findings (first 50)")
-            for r in results[:50]:
-              path = r.get("path","?")
-              start = (r.get("start") or {}).get("line","?")
-              rid = (r.get("check_id") or r.get("rule_id") or "?")
-              msg = ((r.get("extra") or {}).get("message") or "").replace("\n"," ")
-              md.append(f"- `{path}:{start}` **{rid}** — {msg}")
-
-          Path("semgrep.md").write_text("\n".join(md), encoding="utf-8")
-          print(out_txt)
-          PY
+          python "${GITHUB_WORKSPACE}/.github/ci/summary_gen.py" \
+            --json "${GITHUB_WORKSPACE}/semgrep.json" \
+            --setting "${GITHUB_WORKSPACE}/.github/settings/semgrep_basic_setting.yml" \
+            --out-txt "${GITHUB_WORKSPACE}/semgrep.txt" \
+            --out-md "${GITHUB_WORKSPACE}/semgrep.md"
 
       - name: Upload Semgrep artifacts
         if: always()
