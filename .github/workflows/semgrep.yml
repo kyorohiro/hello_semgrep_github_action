@@ -49,7 +49,7 @@ jobs:
            # 解析用
           CMD_JSON="$(python ./.github/ci/build.py --json)"
           echo "RUN(JSON): ${CMD_JSON}"
-          bash -lc "${CMD_JSON}" | tee "${OUT_LOG}" || true
+          bash -lc "${CMD_JSON}" | tee "${OUT_JSON}" || true
           # 人用
           CMD_LOG="$(python ./.github/ci/build.py)"
           echo "RUN(LOG): ${CMD_LOG}"
