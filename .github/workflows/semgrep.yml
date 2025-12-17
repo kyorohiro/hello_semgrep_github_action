@@ -35,7 +35,7 @@ jobs:
       - name: Install Semgrep
         run: |
           python -m pip install --upgrade pip
-          pip install semgrep
+          pip install semgrep pyyaml
 
       # Semgrep を JSON で出す（検出があっても続行）
       - name: Run Semgrep (JSON + SARIF)
@@ -44,12 +44,20 @@ jobs:
         run: |
           set -euo pipefail
           semgrep --version
-
-          # 機械用（集計・Slack用）
-          semgrep scan --config auto --json . | tee semgrep.json || true
-
-          # 人間用（GitHub UI で見れる）
-          semgrep scan --config auto . > ../semgrep.log 2>&1|| true
+           # 解析用
+          CMD_JSON="$(python ./.github/ci/semgrep_basic_build.py --json)"
+          echo "RUN(JSON): ${CMD_JSON}"
+          bash -lc "${CMD_JSON}" | tee ./semgrep.json || true
+          # 人用
+          CMD_LOG="$(python ./.github/ci/semgrep_basic_build.py)"
+          echo "RUN(LOG): ${CMD_LOG}"
+          bash -lc "${CMD_LOG}" > ./semgrep.log 2>&1 || true
+#          # 機械用（集計・Slack用）
+#          semgrep scan --config auto --json . | tee semgrep.json || true
+#
+#          # 人間用（GitHub UI で見れる）
+#          semgrep scan --config auto . > ./semgrep.log 2>&1|| true
+#
 
       # JSON から独自 Summary を作る（Slack用 semgrep.txt を生成）
       - name: Build Summary (JSON -> TXT/MD)
