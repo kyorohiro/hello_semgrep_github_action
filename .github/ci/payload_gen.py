@@ -21,7 +21,7 @@ payload = {
       f"*Run:* <{run_url}|Open GitHub Actions run>"
     }},
     {"type": "section", "text": {"type": "mrkdwn", "text":
-      "*Output (first 1000 chars)*\n```\n" + body + "\n```"
+      "*Output (first 3000 chars)*\n```\n" + body + "\n```"
     }},
   ]
 }
