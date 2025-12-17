@@ -103,7 +103,7 @@ jobs:
           fi
 
           export RUN_URL="https://github.com/${REPO}/actions/runs/${RUN_ID}"
-          export BODY="$($SLACK_WEBHOOK_URL cat semgrep.txt | sed -e 's/^[[:space:]]\+//' -e 's/[[:space:]]\+$//')"
+          export BODY="$SLACK_WEBHOOK_URL  $cat semgrep.txt | sed -e 's/^[[:space:]]\+//' -e 's/[[:space:]]\+$//')"
 
           python .github/ci/payload_gen.py > payload.json
 
