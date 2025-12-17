@@ -12,10 +12,10 @@ sub = os.getenv("SUB", "")
 
 
 payload = {
-  "text": f"Semgrep ${sub} {job_status} - {repo}",
+  "text": f"Semgrep {sub} {job_status} - {repo}",
   "blocks": [
     {"type": "section", "text": {"type": "mrkdwn", "text":
-      f"*Semgrep ${sub} {job_status}*\n"
+      f"*Semgrep {sub} {job_status}*\n"
       f"*Repo:* {repo}\n"
       f"*Ref:* {ref}\n"
       f"*Event:* {event}\n"

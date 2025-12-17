@@ -30,15 +30,15 @@ def load_cfg(config_path: Path | None) -> dict:
     if local_cfg.exists():
         return _read_yaml(local_cfg)
 
-    fallback = Path(".github/ci/semgrep_basic_setting.yml")
+    fallback = Path(".github/ci/setting.yml")
     if fallback.exists():
         return _read_yaml(fallback)
 
-    fallback = Path("../.github/ci/semgrep_basic_setting.yml")
+    fallback = Path("../.github/ci/setting.yml")
     if fallback.exists():
         return _read_yaml(fallback)
 
-    fallback = Path("../../.github/ci/semgrep_basic_setting.yml")
+    fallback = Path("../../.github/ci/setting.yml")
     if fallback.exists():
         return _read_yaml(fallback)
 
