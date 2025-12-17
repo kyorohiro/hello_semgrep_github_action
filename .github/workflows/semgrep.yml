@@ -38,74 +38,56 @@ jobs:
           pip install semgrep
 
       # Semgrep を JSON で出す（検出があっても続行）
-      - name: Run Semgrep (JSON)
+      - name: Run Semgrep (JSON + SARIF)
         id: semgrep
         shell: bash
         run: |
           set -euo pipefail
           semgrep --version
+
+          # 機械用（集計・Slack用）
           semgrep scan --config r/all --json . | tee semgrep.json || true
 
+          # 人間用（GitHub UI で見れる）
+          semgrep scan --config r/all --sarif . > semgrep.sarif || true
+
       # JSON から独自 Summary を作る（Slack用 semgrep.txt を生成）
-      - name: Build Summary (from semgrep.json)
+      - name: Build Summary (JSON -> TXT/MD)
         if: always()
         shell: bash
         run: |
           set -euo pipefail
-
           python - <<'PY'
           import json
           from collections import Counter
           from pathlib import Path
 
-          p = Path("semgrep.json")
-          if not p.exists():
-            Path("semgrep.txt").write_text("Semgrep: semgrep.json not found", encoding="utf-8")
-            raise SystemExit(0)
-
-          data = json.loads(p.read_text())
+          data = json.loads(Path("semgrep.json").read_text())
           results = data.get("results") or []
           errors = data.get("errors") or []
 
-          # 件数
           total = len(results)
           error_count = len(errors)
 
-          # rule_id / severity / file を集計（なければ ?）
           by_rule = Counter((r.get("check_id") or r.get("rule_id") or "?") for r in results)
-
-          # extra.severity は rule によって無い場合があるので、無ければ "UNKNOWN"
-          def sev(r):
-            extra = r.get("extra") or {}
-            return (extra.get("severity") or "UNKNOWN").upper()
-          by_sev = Counter(sev(r) for r in results)
-
           by_file = Counter((r.get("path") or "?") for r in results)
 
+          def sev(r):
+            return ((r.get("extra") or {}).get("severity") or "UNKNOWN").upper()
+          by_sev = Counter(sev(r) for r in results)
+
+          # TXT（Slack用、短め）
           lines = []
           lines.append(f"Semgrep Summary")
           lines.append(f"- findings: {total}")
           if error_count:
             lines.append(f"- errors: {error_count}")
-
           if total:
-            # severity
-            sev_part = ", ".join(f"{k}:{v}" for k, v in sorted(by_sev.items()))
-            lines.append(f"- severity: {sev_part}")
-
-            # top rules
+            lines.append(f"- severity: " + ", ".join(f"{k}:{v}" for k,v in sorted(by_sev.items())))
             lines.append("")
             lines.append("Top rules:")
             for rid, cnt in by_rule.most_common(10):
               lines.append(f"- {rid}: {cnt}")
-
-            # top files
-            lines.append("")
-            lines.append("Top files:")
-            for fp, cnt in by_file.most_common(10):
-              lines.append(f"- {fp}: {cnt}")
-
-            # sample findings（先頭20件）
             lines.append("")
             lines.append("Sample findings:")
             for r in results[:20]:
@@ -115,11 +97,33 @@ jobs:
               msg = ((r.get("extra") or {}).get("message") or "").replace("\n"," ")
               lines.append(f"- {path}:{start} [{rid}] {msg}".strip())
 
-          out = "\n".join(lines)
+          out_txt = "\n".join(lines)[:3000]
+          Path("semgrep.txt").write_text(out_txt, encoding="utf-8")
 
-          # Slack向けに 3000 文字程度に丸める
-          Path("semgrep.txt").write_text(out[:3000], encoding="utf-8")
-          print(out[:3000])
+          # MD（人間用、少し丁寧）
+          md = []
+          md.append("# Semgrep report\n")
+          md.append(f"- findings: **{total}**")
+          if error_count:
+            md.append(f"- errors: **{error_count}**")
+          if total:
+            md.append(f"- severity: " + ", ".join(f"**{k}**:{v}" for k,v in sorted(by_sev.items())))
+            md.append("\n## Top rules")
+            for rid, cnt in by_rule.most_common(20):
+              md.append(f"- `{rid}`: {cnt}")
+            md.append("\n## Top files")
+            for fp, cnt in by_file.most_common(20):
+              md.append(f"- `{fp}`: {cnt}")
+            md.append("\n## Findings (first 50)")
+            for r in results[:50]:
+              path = r.get("path","?")
+              start = (r.get("start") or {}).get("line","?")
+              rid = (r.get("check_id") or r.get("rule_id") or "?")
+              msg = ((r.get("extra") or {}).get("message") or "").replace("\n"," ")
+              md.append(f"- `{path}:{start}` **{rid}** — {msg}")
+
+          Path("semgrep.md").write_text("\n".join(md), encoding="utf-8")
+          print(out_txt)
           PY
 
       - name: Upload Semgrep artifacts
@@ -129,7 +133,9 @@ jobs:
           name: semgrep-log
           path: |
             semgrep.txt
+            semgrep.md
             semgrep.json
+            semgrep.sarif
 
       - name: Notify Slack
         if: always()
