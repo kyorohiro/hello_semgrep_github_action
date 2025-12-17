@@ -44,14 +44,16 @@ jobs:
         run: |
           set -euo pipefail
           semgrep --version
+          OUT_JSON="${GITHUB_WORKSPACE}/semgrep.json"
+          OUT_LOG="${GITHUB_WORKSPACE}/semgrep.log"
            # 解析用
           CMD_JSON="$(python ./.github/ci/semgrep_basic_build.py --json)"
           echo "RUN(JSON): ${CMD_JSON}"
-          bash -lc "${CMD_JSON}" | tee ./semgrep.json || true
+          bash -lc "${CMD_JSON}" | tee "${OUT_LOG}" || true
           # 人用
           CMD_LOG="$(python ./.github/ci/semgrep_basic_build.py)"
           echo "RUN(LOG): ${CMD_LOG}"
-          bash -lc "${CMD_LOG}" > ./semgrep.log 2>&1 || true
+          bash -lc "${CMD_LOG}" > "${OUT_LOG}" 2>&1 || true
 #          # 機械用（集計・Slack用）
 #          semgrep scan --config auto --json . | tee semgrep.json || true
 #
