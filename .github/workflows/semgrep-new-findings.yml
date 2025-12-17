@@ -86,17 +86,19 @@ jobs:
           BASELINE="${{ steps.baseline.outputs.baseline }}"
 
           if [[ -n "$BASELINE" ]]; then
-            semgrep scan --config r/all --baseline-commit "$BASELINE" --json . | tee semgrep.json
+            semgrep scan --config r/all --baseline-commit "$BASELINE" --json . | tee "${GITHUB_WORKSPACE}/semgrep.json"
           else
-            semgrep scan --config r/all --json . | tee semgrep.json
+            semgrep scan --config r/all --json . | tee "${GITHUB_WORKSPACE}/semgrep.json"
           fi
 
           # Slack 用に短いテキストを作る（JSONから生成）
           python - <<'PY'
           import json
           from pathlib import Path
-
-          data = json.loads(Path("semgrep.json").read_text())
+          ws = Path(os.environ["GITHUB_WORKSPACE"])
+          json_path = ws / "semgrep.json"
+          txt_path  = ws / "semgrep.txt"
+          data = json.loads(json_path.read_text())
           results = data.get("results", []) or []
           n = len(results)
 
@@ -109,7 +111,7 @@ jobs:
             lines.append(f"- {path}:{start} [{rid}] {msg}".strip())
 
           out = "\n".join(lines)
-          Path("semgrep.txt").write_text(out[:3000], encoding="utf-8")
+          txt_path.write_text(out[:3000], encoding="utf-8")
           print(out[:3000])
           PY
 
