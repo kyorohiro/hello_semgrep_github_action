@@ -1,7 +1,13 @@
 ```
+mkdir -p /tmp/act-artifacts
 brew install act 
-act push -s SLACK_WEBHOOK_URL="https://hooks.slack.com/services/xxxxx"
-act push --secret-file .secrets
+act push -s SLACK_WEBHOOK_URL="https://hooks.slack.com/services/xxxxx"　 --artifact-server-path /tmp/act-artifacts -W　.github/workflows/semgrep.yml
+
+または、
+
+act push --secret-file .secrets  --artifact-server-path /tmp/act-artifacts -W　.github/workflows/semgrep.yml
+act push --secret-file .secrets  --artifact-server-path /tmp/act-artifacts -W　.github/workflows/semgrep-new-findings.yml
+
 ```
 
 # DOC

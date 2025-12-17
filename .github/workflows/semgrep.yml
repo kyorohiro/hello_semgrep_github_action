@@ -72,12 +72,16 @@ jobs:
             --out-txt "${GITHUB_WORKSPACE}/semgrep.txt" \
             --out-md "${GITHUB_WORKSPACE}/semgrep.md"
 #            --setting "${GITHUB_WORKSPACE}/.github/settings/semgrep_basic_setting.yml" \
-
+      - name: Make artifact suffix
+        id: ts
+        shell: bash
+        run: |
+          echo "ts=$(date -u +'%Y%m%d-%H%M%S')" >> "$GITHUB_OUTPUT"
       - name: Upload Semgrep artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: semgrep-log
+          name: semgrep-log-${{ github.run_id }}-${{ github.run_attempt }}-${{ steps.ts.outputs.ts }}
           path: |
             semgrep.txt
             semgrep.md

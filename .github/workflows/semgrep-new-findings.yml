@@ -120,12 +120,16 @@ jobs:
           # n = len(data.get("results", []) or [])
           # sys.exit(1 if n > 0 else 0)
           # PY
-
+      - name: Make artifact suffix
+        id: ts
+        shell: bash
+        run: |
+          echo "ts=$(date -u +'%Y%m%d-%H%M%S')" >> "$GITHUB_OUTPUT"
       - name: Upload Semgrep artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: semgrep-log
+          name: semgrep-log-${{ github.run_id }}-${{ github.run_attempt }}-${{ steps.ts.outputs.ts }}
           path: |
             semgrep.txt
             semgrep.json
