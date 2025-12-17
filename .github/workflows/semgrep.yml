@@ -49,7 +49,7 @@ jobs:
           semgrep scan --config auto --json . | tee semgrep.json || true
 
           # 人間用（GitHub UI で見れる）
-          semgrep scan --config auto --sarif . > semgrep.sarif 2>&1|| true
+          semgrep scan --config auto . > ../semgrep.log 2>&1|| true
 
       # JSON から独自 Summary を作る（Slack用 semgrep.txt を生成）
       - name: Build Summary (JSON -> TXT/MD)
@@ -135,7 +135,7 @@ jobs:
             semgrep.txt
             semgrep.md
             semgrep.json
-            semgrep.sarif
+            semgrep.log
 
       - name: Notify Slack
         if: always()
