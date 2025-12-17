@@ -1,3 +1,6 @@
+#
+# 差分だけ取得
+#
 name: semgrep
 
 on:
@@ -15,11 +18,12 @@ permissions:
 jobs:
   semgrep:
     runs-on: ubuntu-latest
-    #environment: production
 
     steps:
-      - name: Checkout
+      - name: Checkout (full history for baseline)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -36,22 +40,55 @@ jobs:
           python -m pip install --upgrade pip
           pip install semgrep
 
-      # Semgrep 実行結果をファイルへ。検出があっても続行するため || true
-      - name: Run Semgrep (p/ci)
+      - name: Run Semgrep (r/all, only new findings when baseline exists)
         id: semgrep
+        shell: bash
         run: |
-          set -eu
+          set -euo pipefail
           semgrep --version
-          semgrep --config p/ci . 2>&1 | tee semgrep.txt || true
-      - name: Upload Semgrep log artifact
+          semgrep scan --config r/all --json . | tee semgrep.json
+
+          # Slack 用に短いテキストを作る（JSONから生成）
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path("semgrep.json").read_text())
+          results = data.get("results", []) or []
+          n = len(results)
+
+          lines = [f"Semgrep new findings: {n}"]
+          for r in results[:50]:
+            path = r.get("path","?")
+            start = (r.get("start") or {}).get("line","?")
+            rid = (r.get("check_id") or r.get("rule_id") or "?")
+            msg = ((r.get("extra") or {}).get("message") or "").replace("\n"," ")
+            lines.append(f"- {path}:{start} [{rid}] {msg}".strip())
+
+          out = "\n".join(lines)
+          Path("semgrep.txt").write_text(out[:3000], encoding="utf-8")
+          print(out[:3000])
+          PY
+
+          # 新規 findings があれば fail（落としたくないならこのブロックを消す）
+          # python - <<'PY'
+          # import json, sys
+          # data = json.load(open("semgrep.json","r"))
+          # n = len(data.get("results", []) or [])
+          # sys.exit(1 if n > 0 else 0)
+          # PY
+
+      - name: Upload Semgrep artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: semgrep-log
-          path: semgrep.txt
-      # Slack に送るために 1000文字にカット（行単位がよければ head -n でもOK）
+          path: |
+            semgrep.txt
+            semgrep.json
+
       - name: Notify Slack
-        if: ${{ always() }}
+        if: always()
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           JOB_STATUS: ${{ job.status }}
@@ -63,17 +100,14 @@ jobs:
         run: |
           set -euo pipefail
 
-          # secret が無い（fork PR等）なら通知しない
           if [ -z "${SLACK_WEBHOOK_URL:-}" ]; then
             echo "SLACK_WEBHOOK_URL is empty; skip Slack notification."
             exit 0
           fi
 
           export RUN_URL="https://github.com/${REPO}/actions/runs/${RUN_ID}"
-          export BODY="$(
-            head -c 3000 semgrep.txt 2>/dev/null \
-            | sed -e 's/^[[:space:]]\+//' -e 's/[[:space:]]\+$//'
-          )"
+          export BODY="$(cat semgrep.txt 2>/dev/null || echo 'semgrep.txt missing')"
+          export SUB="New Findings"
 
           python .github/ci/payload_gen.py > payload.json
 

@@ -8,9 +8,11 @@ event = os.getenv("EVENT", "unknown")
 actor = os.getenv("ACTOR", "unknown")
 run_url = os.getenv("RUN_URL", "")
 body = os.getenv("BODY", "")
+sub = os.getenv("SUB", "")
+
 
 payload = {
-  "text": f"Semgrep {job_status} - {repo}",
+  "text": f"Semgrep ${sub} {job_status} - {repo}",
   "blocks": [
     {"type": "section", "text": {"type": "mrkdwn", "text":
       f"*Semgrep {job_status}*\n"
