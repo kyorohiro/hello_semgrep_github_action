@@ -1,6 +1,3 @@
-#
-# 差分だけ取得
-#
 name: semgrep
 
 on:
@@ -20,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout (full history for baseline)
+      - name: Checkout (full history for baseline if you later add diff scan)
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -40,43 +37,90 @@ jobs:
           python -m pip install --upgrade pip
           pip install semgrep
 
-      - name: Run Semgrep (r/all, only new findings when baseline exists)
+      # Semgrep を JSON で出す（検出があっても続行）
+      - name: Run Semgrep (JSON)
         id: semgrep
         shell: bash
         run: |
           set -euo pipefail
           semgrep --version
-          semgrep scan --config r/all --json . | tee semgrep.json
+          semgrep scan --config r/all --json . | tee semgrep.json || true
 
-          # Slack 用に短いテキストを作る（JSONから生成）
+      # JSON から独自 Summary を作る（Slack用 semgrep.txt を生成）
+      - name: Build Summary (from semgrep.json)
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+
           python - <<'PY'
           import json
+          from collections import Counter
           from pathlib import Path
 
-          data = json.loads(Path("semgrep.json").read_text())
-          results = data.get("results", []) or []
-          n = len(results)
+          p = Path("semgrep.json")
+          if not p.exists():
+            Path("semgrep.txt").write_text("Semgrep: semgrep.json not found", encoding="utf-8")
+            raise SystemExit(0)
 
-          lines = [f"Semgrep new findings: {n}"]
-          for r in results[:50]:
-            path = r.get("path","?")
-            start = (r.get("start") or {}).get("line","?")
-            rid = (r.get("check_id") or r.get("rule_id") or "?")
-            msg = ((r.get("extra") or {}).get("message") or "").replace("\n"," ")
-            lines.append(f"- {path}:{start} [{rid}] {msg}".strip())
+          data = json.loads(p.read_text())
+          results = data.get("results") or []
+          errors = data.get("errors") or []
+
+          # 件数
+          total = len(results)
+          error_count = len(errors)
+
+          # rule_id / severity / file を集計（なければ ?）
+          by_rule = Counter((r.get("check_id") or r.get("rule_id") or "?") for r in results)
+
+          # extra.severity は rule によって無い場合があるので、無ければ "UNKNOWN"
+          def sev(r):
+            extra = r.get("extra") or {}
+            return (extra.get("severity") or "UNKNOWN").upper()
+          by_sev = Counter(sev(r) for r in results)
+
+          by_file = Counter((r.get("path") or "?") for r in results)
+
+          lines = []
+          lines.append(f"Semgrep Summary")
+          lines.append(f"- findings: {total}")
+          if error_count:
+            lines.append(f"- errors: {error_count}")
+
+          if total:
+            # severity
+            sev_part = ", ".join(f"{k}:{v}" for k, v in sorted(by_sev.items()))
+            lines.append(f"- severity: {sev_part}")
+
+            # top rules
+            lines.append("")
+            lines.append("Top rules:")
+            for rid, cnt in by_rule.most_common(10):
+              lines.append(f"- {rid}: {cnt}")
+
+            # top files
+            lines.append("")
+            lines.append("Top files:")
+            for fp, cnt in by_file.most_common(10):
+              lines.append(f"- {fp}: {cnt}")
+
+            # sample findings（先頭20件）
+            lines.append("")
+            lines.append("Sample findings:")
+            for r in results[:20]:
+              path = r.get("path","?")
+              start = (r.get("start") or {}).get("line","?")
+              rid = (r.get("check_id") or r.get("rule_id") or "?")
+              msg = ((r.get("extra") or {}).get("message") or "").replace("\n"," ")
+              lines.append(f"- {path}:{start} [{rid}] {msg}".strip())
 
           out = "\n".join(lines)
+
+          # Slack向けに 3000 文字程度に丸める
           Path("semgrep.txt").write_text(out[:3000], encoding="utf-8")
           print(out[:3000])
           PY
-
-          # 新規 findings があれば fail（落としたくないならこのブロックを消す）
-          # python - <<'PY'
-          # import json, sys
-          # data = json.load(open("semgrep.json","r"))
-          # n = len(data.get("results", []) or [])
-          # sys.exit(1 if n > 0 else 0)
-          # PY
 
       - name: Upload Semgrep artifacts
         if: always()
@@ -106,8 +150,7 @@ jobs:
           fi
 
           export RUN_URL="https://github.com/${REPO}/actions/runs/${RUN_ID}"
-          export BODY="$(cat semgrep.txt 2>/dev/null || echo 'semgrep.txt missing')"
-          export SUB="New Findings"
+          export BODY="$(cat semgrep.txt | sed -e 's/^[[:space:]]\+//' -e 's/[[:space:]]\+$//')"
 
           python .github/ci/payload_gen.py > payload.json
 
