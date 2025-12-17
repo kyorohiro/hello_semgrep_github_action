@@ -1,7 +1,7 @@
 #
 # 差分だけ取得
 #
-name: semgrep
+name: semgrep-new-findings
 
 on:
   pull_request:

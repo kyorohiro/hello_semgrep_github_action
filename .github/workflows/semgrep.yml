@@ -1,4 +1,4 @@
-name: semgrep
+name: semgrep-basic
 
 on:
   pull_request:
