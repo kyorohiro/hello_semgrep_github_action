@@ -8,11 +8,10 @@ from pathlib import Path
 
 import yaml
 
-
 def _read_yaml(p: Path) -> dict:
     return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
 
-def load_cfg(config_path: Path | None) -> dict:
+def load_yaml(config_path: Path | None) -> dict:
     """
     設定ファイルの優先順位:
       1) --config で指定されたファイル
@@ -91,23 +90,10 @@ def should_drop(r: dict, drop_list: list) -> bool:
     return False
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--json", default="semgrep.json", help="input semgrep json path")
-    ap.add_argument("--setting", required=False, help="settings yml path (with optional drop:)")
-    ap.add_argument("--out-txt", default="semgrep.txt", help="output txt path")
-    ap.add_argument("--out-md", default="semgrep.md", help="output md path")
-    ap.add_argument("--max-txt", type=int, default=1000, help="max chars for txt")
-    args = ap.parse_args()
-
-    json_path = Path(args.json)
-    data = json.loads(json_path.read_text(encoding="utf-8"))
-    results = data.get("results") or []
-    errors = data.get("errors") or []
-
-    cfg = load_yaml(Path(args.setting)) if args.setting else {}
-    drop_list = cfg.get("drop") or []
-
+def build_reports(results: list[dict], errors: list[dict], drop_list: list[dict], max_txt: int = 1000) -> tuple[str, str]:
+    """
+    results/errors/drop_list を受け取って、Slack用txtと人間用mdを返す（I/Oなし）。
+    """
     filtered = [r for r in results if not should_drop(r, drop_list)]
 
     total = len(filtered)
@@ -117,7 +103,7 @@ def main() -> int:
     by_file = Counter((get_path(r) or "?") for r in filtered)
     by_sev = Counter(get_severity(r) for r in filtered)
 
-    # TXT（Slack用）
+    # TXT
     lines: list[str] = []
     lines.append("Semgrep Summary")
     lines.append(f"- findings: {total}")
@@ -138,10 +124,9 @@ def main() -> int:
             msg = get_message(r).replace("\n", " ")
             lines.append(f"- {path}:{start} [{rid}] {msg}".strip())
 
-    out_txt = "\n".join(lines)[: args.max_txt]
-    Path(args.out_txt).write_text(out_txt, encoding="utf-8")
+    out_txt = "\n".join(lines)[:max_txt]
 
-    # MD（人間用）
+    # MD
     md: list[str] = []
     md.append("# Semgrep report\n")
     md.append(f"- findings: **{total}**")
@@ -163,7 +148,36 @@ def main() -> int:
             msg = get_message(r).replace("\n", " ")
             md.append(f"- `{path}:{start}` **{rid}** — {msg}")
 
-    Path(args.out_md).write_text("\n".join(md), encoding="utf-8")
+    out_md = "\n".join(md)
+    return out_txt, out_md
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--json", default="semgrep.json", help="input semgrep json path")
+    ap.add_argument("--setting", required=False, help="settings yml path (with optional drop:)")
+    ap.add_argument("--out-txt", default="semgrep.txt", help="output txt path")
+    ap.add_argument("--out-md", default="semgrep.md", help="output md path")
+    ap.add_argument("--max-txt", type=int, default=1000, help="max chars for txt")
+    args = ap.parse_args()
+
+    json_path = Path(args.json)
+    data = json.loads(json_path.read_text(encoding="utf-8"))
+    results = data.get("results") or []
+    errors = data.get("errors") or []
+
+    cfg = load_yaml(Path(args.setting)) if args.setting else {}
+    drop_list = cfg.get("drop") or []
+
+    out_txt, out_md = build_reports(
+        results=results,
+        errors=errors,
+        drop_list=drop_list,
+        max_txt=args.max_txt,
+    )
+
+    Path(args.out_txt).write_text(out_txt, encoding="utf-8")
+    Path(args.out_md).write_text(out_md, encoding="utf-8")
 
     print(out_txt)
     return 0
