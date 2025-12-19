@@ -10,16 +10,10 @@ include_dir:
   - .
 
 exclude_dir:
-  - example
+  - examples
   - tests
+  - .github
+  - semgrep.json
 
 exclude_rules:
-  - javascript.lang.security.audit.eval-detected
-  - javascript.lang.security.audit.command-injection
-
 drop:
-  - rule: javascript.lang.security.audit.eval-detected
-    path_contains: generated/
-  - rule: javascript.lang.security.audit.command-injection
-    message_contains: "test helper"
-  - message_contains: "client_id"

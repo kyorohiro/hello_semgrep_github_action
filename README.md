@@ -5,8 +5,8 @@ act push -s SLACK_WEBHOOK_URL="https://hooks.slack.com/services/xxxxx"　 --arti
 
 または、
 
-act push --secret-file .secrets  --artifact-server-path /tmp/act-artifacts -W　.github/workflows/semgrep.yml
-act push --secret-file .secrets  --artifact-server-path /tmp/act-artifacts -W　.github/workflows/semgrep-new-findings.yml
+act push --secret-file .secrets  --artifact-server-path /tmp/act-artifacts -W .github/workflows/semgrep.yml
+act push --secret-file .secrets  --artifact-server-path /tmp/act-artifacts -W .github/workflows/semgrep-new-findings.yml
 
 ```
 

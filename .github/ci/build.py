@@ -13,7 +13,7 @@ def _read_yaml(p: Path) -> dict:
     return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
 
 
-def load_cfg(config_path: Path | None) -> dict:
+def load_yaml(config_path: Path | None) -> dict:
     """
     設定ファイルの優先順位:
       1) --config で指定されたファイル
@@ -92,7 +92,7 @@ def main() -> int:
     args = parser.parse_args()
 
     config_path = Path(args.config).resolve() if args.config else None
-    cfg = load_cfg(config_path)
+    cfg = load_yaml(config_path)
 
     cmd = build_cmd(cfg, json_mode=bool(args.json))
 

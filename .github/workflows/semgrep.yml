@@ -53,7 +53,7 @@ jobs:
           # 人用
           CMD_LOG="$(python ./.github/ci/build.py)"
           echo "RUN(LOG): ${CMD_LOG}"
-          bash -lc "${CMD_LOG}" > "${OUT_LOG}" 2>&1 || true
+          bash -lc "${CMD_LOG}" | tee "${OUT_LOG}" || true
 #          # 機械用（集計・Slack用）
 #          semgrep scan --config auto --json . | tee semgrep.json || true
 #
